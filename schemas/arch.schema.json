@@ -72,8 +72,19 @@
         },
         "type": {
           "type": "string",
-          "enum": ["tool", "registry", "service", "library", "cli", "agent"],
+          "enum": ["tool", "registry", "service", "library", "cli", "agent", "accessor", "data"],
           "description": "System archetype"
+        },
+        "registry_relationship": {
+          "type": "string",
+          "description": "For accessors: describes relationship to registry"
+        },
+        "invariants": {
+          "type": "array",
+          "description": "Core invariants that must always hold",
+          "items": {
+            "type": "string"
+          }
         },
         "actors": {
           "type": "array",
@@ -107,11 +118,19 @@
     },
     "container": {
       "type": "object",
-      "description": "C4 Container - a deployable/runnable unit",
+      "description": "C4 Container - a deployable/runnable unit or data structure",
       "required": ["name"],
       "properties": {
         "name": {
           "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "description": "Container type (e.g., 'data_structure' for data-only patterns)"
+        },
+        "description": {
+          "type": "string",
+          "description": "What this container represents"
         },
         "tech": {
           "type": "string",
@@ -120,6 +139,20 @@
         "location": {
           "type": "string",
           "description": "Path in the codebase"
+        },
+        "contents": {
+          "type": "array",
+          "description": "What this container contains (for data structures)",
+          "items": {
+            "type": "string"
+          }
+        },
+        "constraints": {
+          "type": "array",
+          "description": "Constraints on this container",
+          "items": {
+            "type": "string"
+          }
         },
         "responsibilities": {
           "type": "array",
@@ -187,7 +220,7 @@
       "properties": {
         "id": {
           "type": "string",
-          "pattern": "^[a-z][a-z0-9_-]*$"
+          "pattern": "^[a-z][a-z0-9_.-]*$"
         },
         "title": {
           "type": "string"
@@ -276,7 +309,7 @@
         },
         "type": {
           "type": "string",
-          "enum": ["api", "cli", "file", "event", "internal"]
+          "enum": ["api", "cli", "file", "event", "internal", "vcs", "conceptual"]
         },
         "contract": {
           "type": "string",
@@ -288,6 +321,20 @@
         },
         "consumers": {
           "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "producers": {
+          "type": "array",
+          "description": "Who/what produces data at this boundary",
+          "items": {
+            "type": "string"
+          }
+        },
+        "constraints": {
+          "type": "array",
+          "description": "Constraints on this boundary",
           "items": {
             "type": "string"
           }
@@ -318,7 +365,7 @@
         },
         "status": {
           "type": "string",
-          "enum": ["draft", "stable", "deprecated"],
+          "enum": ["draft", "active", "stable", "deprecated"],
           "default": "draft"
         },
         "updated": {

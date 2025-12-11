@@ -221,7 +221,7 @@
         },
         "status": {
           "type": "string",
-          "enum": ["draft", "stable", "deprecated"],
+          "enum": ["draft", "active", "stable", "deprecated"],
           "default": "draft"
         },
         "updated": {
