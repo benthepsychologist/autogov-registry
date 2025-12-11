@@ -1,0 +1,299 @@
+# autogov architecture pack - accessor for git-backed governance registries
+kind: arch
+metadata:
+  name: autogov
+  version: "2.0.0"
+  description: "Accessor (library + CLI) for git-backed governance pack registries"
+  owner: platform-team
+  status: active
+  updated: "2025-12-11"
+
+system:
+  name: autogov
+  type: accessor
+  purpose: "Accessor (library + CLI) for git-backed governance pack registries"
+  scope: "Project-agnostic governance tool used by humans, dev tooling, and LLM agents"
+  registry_relationship: |
+    The registry is a git-backed, data-only repository (autogov-registry).
+    autogov is the accessor that syncs, loads, validates, and exports.
+
+    Registry: benthepsychologist/autogov-registry
+    Local path: ~/.life/registries/autogov/
+  actors:
+    - name: Developer
+      type: human
+      interactions:
+        - "gov registry sync - sync local clone from remote"
+        - "gov registry status - show sync state"
+        - "gov list - discover available packs"
+        - "gov show - inspect pack details"
+        - "gov validate - check pack validity"
+    - name: LLM Agent
+      type: agent
+      interactions:
+        - "gov export - load policies for context"
+        - "gov validate - verify pack changes"
+    - name: CI Pipeline
+      type: system
+      interactions:
+        - "gov validate - enforce pack validity"
+        - "gov export - generate documentation"
+
+containers:
+  - name: CLI
+    tech: python/typer
+    location: src/autogov/cli.py
+    responsibilities:
+      - "Parse command-line arguments"
+      - "Format output for terminal (Rich tables, syntax highlighting)"
+      - "Handle errors and exit codes"
+      - "Route commands to appropriate modules"
+      - "Provide registry management commands (sync, status)"
+    anti_responsibilities:
+      - "Must NOT parse YAML directly"
+      - "Must NOT implement validation logic"
+      - "Must NOT format export output (delegate to Exporter)"
+      - "Must NOT call git directly (delegate to GitAdapter)"
+    depends_on: [Loader, Exporter, Validator, GitAdapter]
+    exposes:
+      - "gov registry sync"
+      - "gov registry status"
+      - "gov list"
+      - "gov show"
+      - "gov export"
+      - "gov validate"
+
+  - name: Loader
+    tech: python
+    location: src/autogov/registry.py
+    responsibilities:
+      - "Resolve registry root path (~/.life/registries/autogov/)"
+      - "Discover pack files in registry packs/ directory"
+      - "Parse YAML files into dataclasses"
+      - "Fail fast if registry not synced"
+    anti_responsibilities:
+      - "Must NOT format output"
+      - "Must NOT validate against schema"
+      - "Must NOT call git directly"
+      - "Must NOT assume CWD contains packs"
+    depends_on: [Models]
+    exposes:
+      - "get_registry_root()"
+      - "list_packs()"
+      - "load_pack()"
+      - "discover_pack_files()"
+
+  - name: Validator
+    tech: python/jsonschema
+    location: src/autogov/validator.py
+    responsibilities:
+      - "Load JSON schemas from registry schemas/ directory"
+      - "Validate pack data against kind-specific schema"
+      - "Return structured validation results"
+    anti_responsibilities:
+      - "Must NOT implement custom validation rules"
+      - "Must NOT modify pack data"
+    depends_on: [Models, Loader]
+    exposes:
+      - "validate_pack()"
+      - "validate_packs()"
+
+  - name: Exporter
+    tech: python
+    location: src/autogov/exporter.py
+    responsibilities:
+      - "Transform pack dataclasses to output formats"
+      - "Support TEXT, MARKDOWN, YAML formats"
+      - "Filter by role when requested"
+      - "Kind-specific formatting (policy vs arch vs state)"
+    anti_responsibilities:
+      - "Must NOT do file I/O"
+      - "Must NOT parse YAML"
+    depends_on: [Models]
+    exposes:
+      - "export_pack()"
+      - "export_packs()"
+
+  - name: GitAdapter
+    tech: python/subprocess
+    location: src/autogov/git_adapter.py
+    responsibilities:
+      - "Clone registry from remote"
+      - "Fetch updates from origin"
+      - "Hard reset to origin/main"
+      - "Get HEAD commit info (hash, subject, date)"
+      - "Check if working tree is dirty"
+    anti_responsibilities:
+      - "Must NOT print to stdout/stderr"
+      - "Must NOT handle user interaction"
+      - "Must NOT know about pack structure"
+    depends_on: []
+    exposes:
+      - "clone()"
+      - "fetch()"
+      - "reset_hard()"
+      - "get_head_info()"
+      - "is_dirty()"
+
+  - name: Models
+    tech: python/dataclasses
+    location: src/autogov/models.py
+    responsibilities:
+      - "Define data structures for all pack kinds"
+      - "Provide PackKind enum for discrimination"
+      - "Define shared metadata structure"
+    anti_responsibilities:
+      - "Must NOT contain business logic"
+      - "Must NOT import other autogov modules"
+    depends_on: []
+    exposes:
+      - "PackKind"
+      - "PackMetadata"
+      - "PolicyPack"
+      - "ArchPack"
+      - "StatePack"
+
+flows:
+  - name: Registry Sync
+    description: "User syncs local registry clone from remote"
+    path:
+      - "CLI receives 'gov registry sync' command"
+      - "CLI calls GitAdapter.clone() if local path doesn't exist"
+      - "CLI calls GitAdapter.fetch() + reset_hard() if exists"
+      - "CLI displays sync result (commit hash, message)"
+
+  - name: Registry Status
+    description: "User checks registry sync state"
+    path:
+      - "CLI receives 'gov registry status' command"
+      - "CLI calls Loader.get_registry_root() to check path"
+      - "CLI calls GitAdapter.get_head_info() for commit details"
+      - "CLI calls GitAdapter.is_dirty() for working tree state"
+      - "CLI displays status (commit, dirty state, last sync)"
+
+  - name: List Packs
+    description: "User discovers available packs"
+    path:
+      - "CLI receives 'gov list' command"
+      - "CLI calls Loader.list_packs()"
+      - "Loader checks registry root exists (fail fast if not)"
+      - "Loader discovers YAML files in registry packs/"
+      - "Loader parses metadata from each file"
+      - "CLI formats results as table"
+
+  - name: Export for LLM
+    description: "Agent loads policies for context"
+    path:
+      - "CLI receives 'gov export <names> --format text'"
+      - "CLI calls Loader.load_pack() for each name"
+      - "CLI calls Exporter.export_packs()"
+      - "Exporter transforms to LLM-optimized text"
+      - "CLI outputs to stdout"
+
+  - name: Validate Pack
+    description: "CI validates pack against schema"
+    path:
+      - "CLI receives 'gov validate <name>'"
+      - "CLI calls Validator.validate_pack()"
+      - "Validator loads pack via Loader"
+      - "Validator loads kind-specific schema from registry"
+      - "Validator runs jsonschema validation"
+      - "CLI displays results, exits with code"
+
+decisions:
+  - id: adr-001-yaml-format
+    title: "Use YAML for pack definitions"
+    status: accepted
+    context: "Need human-readable, version-control friendly format for governance packs"
+    decision: "Use YAML as primary pack format"
+    rationale: "YAML is familiar to DevOps practitioners, readable by both humans and machines, well-supported in Python"
+    consequences:
+      - "Easy for humans to author and review"
+      - "Requires safe YAML parsing (yaml.safe_load)"
+      - "Schema validation via JSON Schema after YAML parse"
+
+  - id: adr-002-multi-kind
+    title: "Separate policy, arch, and state concerns"
+    status: accepted
+    context: "v0 mixed policies, architecture docs, and state in single pack type"
+    decision: "Split into three distinct pack kinds with separate schemas"
+    rationale: "Follows industry patterns - policy (OPA), architecture (C4), state (Backstage)"
+    consequences:
+      - "Clearer separation of concerns"
+      - "Kind-specific validation and export"
+      - "Breaking change from v0 pack format"
+
+  - id: adr-003-registry-accessor-separation
+    title: "Separate registry (data) from accessor (code)"
+    status: accepted
+    context: "Need clean separation between pack definitions and tooling that consumes them"
+    decision: "Registry is data-only git repo; autogov is accessor that syncs and reads"
+    rationale: |
+      - Registry contains only YAML/JSON data, no code
+      - Accessor handles sync, load, validate, export
+      - Clear boundary enables multiple accessors for same registry
+    consequences:
+      - "Registry: benthepsychologist/autogov-registry (data-only)"
+      - "Accessor: benthepsychologist/autogov (this repo)"
+      - "Local clone at ~/.life/registries/autogov/"
+      - "Sync required before pack operations"
+
+  - id: adr-004-git-adapter
+    title: "Single module for git subprocess calls"
+    status: accepted
+    context: "Need to isolate git operations for testing and security"
+    decision: "All git subprocess calls go through git_adapter.py"
+    rationale: |
+      - Single point of control for git operations
+      - Easy to mock in tests
+      - Clear security boundary
+    consequences:
+      - "No subprocess.run(['git'...]) outside git_adapter"
+      - "git_adapter is the only module that imports subprocess for git"
+      - "Tests mock git_adapter, not subprocess"
+
+  - id: adr-005-fail-fast-missing-registry
+    title: "Fail fast when registry not synced"
+    status: accepted
+    context: "Pack operations require registry to exist"
+    decision: "Raise RegistryNotSyncedError with clear message if registry missing"
+    rationale: |
+      - Clear error better than confusing 'file not found'
+      - Guides user to run 'gov registry sync'
+      - No silent fallbacks to local ./packs/ directory
+    consequences:
+      - "All pack commands fail if ~/.life/registries/autogov/ doesn't exist"
+      - "Error message includes fix: 'Run gov registry sync first'"
+      - "No environment variable overrides for pack path"
+
+boundaries:
+  - name: CLI Interface
+    type: cli
+    contract: "gov <command> [options]"
+    direction: inbound
+    consumers:
+      - Developer
+      - LLM Agent
+      - CI Pipeline
+
+  - name: Registry Files
+    type: file
+    contract: "~/.life/registries/autogov/packs/**/*.yaml"
+    direction: inbound
+    consumers:
+      - Loader
+      - Validator
+
+  - name: Git Remote
+    type: vcs
+    contract: "git@github.com:benthepsychologist/autogov-registry.git"
+    direction: bidirectional
+    consumers:
+      - GitAdapter
+
+  - name: stdout/stderr
+    type: cli
+    direction: outbound
+    consumers:
+      - Shell
+      - Piped commands

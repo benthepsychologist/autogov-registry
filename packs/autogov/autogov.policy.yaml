@@ -1,0 +1,134 @@
+# autogov policy pack - rules for developing autogov itself
+kind: policy
+metadata:
+  name: autogov
+  version: "1.0.0"
+  description: "Policy rules for developing the autogov governance CLI"
+  owner: platform-team
+  status: draft
+  updated: "2025-12-11"
+
+rules:
+  - id: layering.cli_no_direct_yaml
+    description: "CLI layer must not directly parse YAML; use registry"
+    severity: error
+    applies_to: [IMPL]
+    rationale: "Single responsibility - registry owns YAML parsing"
+    refs:
+      - "src/autogov/cli.py"
+      - "src/autogov/registry.py"
+
+  - id: layering.exporter_no_io
+    description: "Exporter must not do file I/O; return strings only"
+    severity: error
+    applies_to: [IMPL]
+    rationale: "Exporter is pure transformation; CLI handles I/O"
+
+  - id: layering.validator_schema_only
+    description: "Validator must only use JSON Schema validation"
+    severity: warning
+    applies_to: [IMPL]
+    rationale: "Consistent validation via schemas, not custom logic"
+
+  - id: naming.pack_files
+    description: "Pack files must be named {project}.{kind}.yaml"
+    severity: error
+    applies_to: [IMPL, ARCH]
+    rationale: "Predictable discovery pattern for registry"
+
+  - id: schema.kind_discrimination
+    description: "All packs must have 'kind' field for type discrimination"
+    severity: error
+    applies_to: [IMPL, ARCH]
+    rationale: "Required for multi-kind pack system"
+
+constraints:
+  allow:
+    paths:
+      - path: "src/autogov/**/*.py"
+        reason: "Core implementation"
+      - path: "tests/**/*.py"
+        reason: "Test suite"
+      - path: "packs/**/*.yaml"
+        reason: "Pack definitions"
+      - path: "schemas/*.json"
+        reason: "JSON schemas"
+  deny:
+    paths:
+      - path: "src/autogov/cli.py"
+        reason: "CLI is stable - prefer extending via new commands"
+    imports:
+      - "subprocess"
+      - "os.system"
+    patterns:
+      - "print() in production code"
+      - "yaml.load() without safe_load"
+  require:
+    naming:
+      files:
+        pattern: "^[a-z][a-z0-9_]*\\.py$"
+        reason: "snake_case for Python files"
+      functions:
+        pattern: "^[a-z][a-z0-9_]*$"
+        reason: "snake_case for functions"
+      classes:
+        pattern: "^[A-Z][a-zA-Z0-9]*$"
+        reason: "PascalCase for classes"
+
+layers:
+  - name: cli
+    can_import: [registry, exporter, validator, models]
+    cannot_import: []
+  - name: registry
+    can_import: [models]
+    cannot_import: [cli, exporter, validator]
+  - name: exporter
+    can_import: [models]
+    cannot_import: [cli, registry, validator]
+  - name: validator
+    can_import: [models, registry]
+    cannot_import: [cli, exporter]
+  - name: models
+    can_import: []
+    cannot_import: [cli, registry, exporter, validator]
+
+roles:
+  ARCH:
+    must_follow_rules:
+      - "*"
+    directives:
+      - "Own schema design decisions"
+      - "Approve breaking changes to pack format"
+      - "Review layer boundary violations"
+    can_modify_policies: true
+    can_override: ["*"]
+  IMPL:
+    must_follow_rules:
+      - "layering.*"
+      - "naming.*"
+      - "schema.*"
+    directives:
+      - "Follow layering rules strictly"
+      - "Use registry for pack loading, not direct YAML"
+      - "Add tests for all new functionality"
+    can_modify_policies: false
+    can_override: []
+  QA:
+    must_follow_rules:
+      - "*"
+    directives:
+      - "Enforce >=80% test coverage"
+      - "Validate all packs pass schema validation"
+      - "Test CLI output formats"
+    can_modify_policies: false
+    can_override: []
+
+escalation:
+  - id: layer_violation
+    trigger: "Import across forbidden layer boundary"
+    action: refuse
+    message: "Layer violation detected. Check the layers rules in autogov.policy.yaml"
+  - id: schema_change
+    trigger: "Modifying pack.base.schema.json or kind schemas"
+    action: escalate
+    message: "Schema changes require ARCH approval - may break existing packs"

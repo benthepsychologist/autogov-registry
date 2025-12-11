@@ -1,0 +1,192 @@
+# registry-pattern architecture - data-only pattern definition
+kind: arch
+metadata:
+  name: registry-pattern
+  version: "2.0.0"
+  description: "Git-backed, semver-governed, data-only storage pattern for versioned definitions"
+  owner: platform-team
+  status: active
+  updated: "2025-12-11"
+
+system:
+  name: Registry Pattern
+  type: data
+  purpose: "Git-backed, semver-governed, data-only storage pattern for versioned definitions"
+  scope: "Abstract pattern for data-only registries containing versioned definitions (packs, schemas, blocks)"
+  invariants:
+    - "Data-only: No executable code in registry"
+    - "Git-backed: All mutations via git commits"
+    - "Semver-governed: All definitions follow semantic versioning"
+    - "Immutable versions: Once published, a version is never modified"
+    - "Accessor-managed: Only accessor tools sync and read from registry"
+
+containers:
+  - name: Registry Root
+    type: data_structure
+    description: "Top-level directory structure of a registry"
+    contents:
+      - "REGISTRY.yaml - registry metadata and configuration"
+      - "packs/ - definition packs organized by name"
+      - "schemas/ - JSON schemas for validation"
+      - "blocks/ - reusable content blocks"
+    constraints:
+      - "Must be a git repository"
+      - "Must contain REGISTRY.yaml at root"
+      - "All paths are relative to registry root"
+
+  - name: Definition Store
+    type: data_structure
+    description: "Where versioned definitions live"
+    contents:
+      - "packs/{name}/{name}.{kind}.yaml - pack definitions"
+      - "schemas/{kind}.schema.json - validation schemas"
+      - "blocks/{name}.block.yaml - reusable blocks"
+    constraints:
+      - "File naming follows convention: {name}.{kind}.yaml"
+      - "Each definition has metadata section with name, version, status"
+      - "Definitions are YAML or JSON only"
+
+  - name: Metadata Index
+    type: data_structure
+    description: "Registry-level metadata and lock files"
+    contents:
+      - "REGISTRY.yaml - registry name, version, description"
+      - "REGISTRY.lock - pinned versions for reproducibility (optional)"
+    constraints:
+      - "Lock file is generated, not hand-edited"
+      - "Registry metadata is authoritative"
+
+  - name: Integrity Data
+    type: data_structure
+    description: "Checksums and verification data stored in metadata"
+    contents:
+      - "Checksums embedded in REGISTRY.lock"
+      - "SHA256 hash of each definition file"
+    constraints:
+      - "Checksums computed at publish time"
+      - "Verification performed by accessor on load"
+
+decisions:
+  - id: registry.versioning.mechanism
+    title: "Git-backed, semver-governed registries"
+    status: accepted
+    context: "Registries need version control, audit trail, and semantic versioning"
+    decision: "Use git as the versioning and mutation mechanism; all definitions use semver"
+    rationale: |
+      - Git provides atomic commits, history, branching, and distributed sync
+      - Semver communicates breaking changes clearly
+      - Together they enable reproducible builds and rollback
+    consequences:
+      - "All registry mutations are git commits"
+      - "Version history is preserved forever"
+      - "Accessors clone/fetch to get updates"
+
+  - id: registry.immutability
+    title: "Append-only, no in-place edits"
+    status: accepted
+    context: "Once a version is published, consumers depend on its stability"
+    decision: "Published versions are immutable; updates require new version numbers"
+    rationale: |
+      - Immutability ensures reproducibility
+      - Consumers can pin versions safely
+      - Breaking changes are explicit via major version bump
+    consequences:
+      - "Typo fixes require patch version bump"
+      - "Old versions remain accessible"
+      - "No 'latest' alias that silently changes"
+
+  - id: registry.no_code
+    title: "Data-only invariant"
+    status: accepted
+    context: "Registries should be safe to clone and inspect"
+    decision: "Registries contain only data files (YAML, JSON, Markdown); no executable code"
+    rationale: |
+      - Eliminates supply chain attack vector
+      - Enables safe inspection without execution
+      - Clear separation between data and accessor logic
+    consequences:
+      - "No Python, JavaScript, shell scripts in registry"
+      - "Build/transform logic lives in accessor, not registry"
+      - "Registry can be validated with schema tools only"
+
+  - id: registry.sync_model
+    title: "Local clone, accessor-managed"
+    status: accepted
+    context: "Accessors need efficient, offline-capable access to registry data"
+    decision: "Accessors clone registry to local filesystem; sync on demand"
+    rationale: |
+      - Local clone enables offline operation
+      - Git fetch/reset provides efficient sync
+      - Single source of truth remains remote
+    consequences:
+      - "Accessor manages clone location (e.g., ~/.life/registries/)"
+      - "Sync is explicit user action, not automatic"
+      - "Local modifications are discouraged (fail-fast on dirty state)"
+
+boundaries:
+  - name: File System Interface
+    type: file
+    direction: outbound
+    contract: "Registry is accessed via filesystem paths after clone"
+    consumers:
+      - "Accessor tools (read-only after sync)"
+    constraints:
+      - "No network API; file system is the interface"
+      - "Paths are predictable by convention"
+
+  - name: Git Mutation Interface
+    type: vcs
+    direction: inbound
+    contract: "All writes to registry go through git (commit, push)"
+    producers:
+      - "Registry maintainers via git"
+      - "CI/CD pipelines via git"
+    constraints:
+      - "No direct file writes to remote"
+      - "All changes have commit history"
+
+  - name: Accessor Boundary
+    type: conceptual
+    direction: outbound
+    contract: "Accessors are the only consumers of registry data"
+    consumers:
+      - "CLI tools"
+      - "Libraries"
+      - "Agents/orchestrators"
+    constraints:
+      - "Accessor handles sync, load, validate, export"
+      - "Registry has no knowledge of accessor implementation"
+
+flows:
+  - name: Sync Flow
+    description: "Accessor syncs local clone with remote registry"
+    path:
+      - "Accessor checks if local clone exists"
+      - "If not, clone from remote"
+      - "If exists, fetch and reset to origin/main"
+      - "Local clone now matches remote"
+
+  - name: Discovery Flow
+    description: "Accessor discovers definitions in local clone"
+    path:
+      - "Accessor reads from local registry root"
+      - "Glob for definition files by convention"
+      - "Parse metadata from each definition"
+      - "Return list of available definitions"
+
+  - name: Load Flow
+    description: "Accessor loads a specific definition"
+    path:
+      - "Accessor resolves definition path from registry root"
+      - "Read and parse YAML/JSON file"
+      - "Optionally verify checksum"
+      - "Return parsed definition"
+
+  - name: Publish Flow
+    description: "Maintainer publishes new definition version"
+    path:
+      - "Author creates/updates definition file"
+      - "Author commits with semver in commit message"
+      - "CI validates schema and policy"
+      - "Push to remote makes version available"
+      - "Accessors see new version on next sync"

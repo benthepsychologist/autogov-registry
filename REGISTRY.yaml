@@ -1,0 +1,19 @@
+name: autogov
+version: 0.1.0
+description: Git-backed governance pack registry for autogov
+maintainer: benthepsychologist
+
+layout:
+  packs: packs/
+  schemas: schemas/
+
+contents:
+  packs:
+    - autogov
+    - canonizer
+    - registry-pattern
+  schemas:
+    - pack.base.schema.json
+    - policy.schema.json
+    - arch.schema.json
+    - state.schema.json

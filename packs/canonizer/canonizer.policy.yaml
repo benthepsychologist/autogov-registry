@@ -1,0 +1,124 @@
+# canonizer policy pack - rules for developing canonizer
+kind: policy
+metadata:
+  name: canonizer
+  version: "1.0.0"
+  description: "Policy rules for developing the canonizer schema registry"
+  owner: platform-team
+  status: draft
+  updated: "2025-12-11"
+
+rules:
+  - id: integrity.checksum_required
+    description: "All schemas must have SHA256 checksum for integrity verification"
+    severity: error
+    applies_to: [IMPL]
+    rationale: "Immutable schemas require integrity verification"
+    refs:
+      - "checksums enable content-addressable lookup"
+
+  - id: integrity.lockfile_immutable
+    description: "Lock file entries must never be modified, only appended"
+    severity: error
+    applies_to: [IMPL, ARCH]
+    rationale: "Append-only ensures reproducible builds"
+
+  - id: lifecycle.status_progression
+    description: "Schema status must follow lifecycle: draft -> active -> deprecated -> archived"
+    severity: error
+    applies_to: [IMPL]
+    rationale: "Predictable lifecycle for consumers"
+
+  - id: lifecycle.no_breaking_changes
+    description: "Active schemas cannot have breaking changes; create new version instead"
+    severity: error
+    applies_to: [IMPL, ARCH]
+    rationale: "Breaking changes break dependent systems"
+
+  - id: naming.schema_id_format
+    description: "Schema IDs must follow {domain}.{name}.v{version} pattern"
+    severity: error
+    applies_to: [IMPL]
+    rationale: "Consistent naming enables predictable discovery"
+
+  - id: validation.jsonschema_only
+    description: "Schema validation must use JSON Schema draft-07 or later"
+    severity: warning
+    applies_to: [IMPL]
+    rationale: "Standard validation format for interoperability"
+
+constraints:
+  allow:
+    paths:
+      - path: "src/canonizer/**/*.py"
+        reason: "Core implementation"
+      - path: "tests/**/*.py"
+        reason: "Test suite"
+      - path: "schemas/**/*.json"
+        reason: "Schema definitions"
+    schemas:
+      - "canonizer.schema.v1"
+      - "canonizer.lockfile.v1"
+  deny:
+    patterns:
+      - "Modifying existing lock file entries"
+      - "Changing checksum algorithm without migration"
+      - "Deleting active schemas"
+  require:
+    naming:
+      files:
+        pattern: "^[a-z][a-z0-9_]*\\.(py|json|yaml)$"
+        reason: "Lowercase with underscores"
+
+layers:
+  - name: cli
+    can_import: [registry, runtime, validator]
+    cannot_import: []
+  - name: registry
+    can_import: [models]
+    cannot_import: [cli, runtime, validator]
+  - name: runtime
+    can_import: [registry, models]
+    cannot_import: [cli]
+  - name: validator
+    can_import: [registry, models]
+    cannot_import: [cli, runtime]
+  - name: models
+    can_import: []
+    cannot_import: [cli, registry, runtime, validator]
+
+roles:
+  ARCH:
+    must_follow_rules:
+      - "*"
+    directives:
+      - "Own schema format decisions"
+      - "Approve new schema namespaces"
+      - "Review integrity/lifecycle changes"
+    can_modify_policies: true
+    can_override: ["*"]
+  IMPL:
+    must_follow_rules:
+      - "integrity.*"
+      - "lifecycle.*"
+      - "naming.*"
+    directives:
+      - "Never modify lock file entries"
+      - "Always compute and verify checksums"
+      - "Follow status lifecycle strictly"
+    can_modify_policies: false
+    can_override: []
+
+escalation:
+  - id: integrity_violation
+    trigger: "Attempt to modify checksum or lock file entry"
+    action: refuse
+    message: "Integrity violation - checksums and lock entries are immutable"
+  - id: breaking_change
+    trigger: "Breaking change to active schema"
+    action: refuse_with_alternative
+    message: "Create a new schema version instead of modifying active schema"
+  - id: lifecycle_skip
+    trigger: "Skipping lifecycle status (e.g., draft directly to deprecated)"
+    action: warn
+    message: "Status should progress through lifecycle stages"

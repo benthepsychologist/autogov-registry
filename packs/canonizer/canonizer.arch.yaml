@@ -1,0 +1,253 @@
+# canonizer architecture pack - C4-style system documentation
+kind: arch
+metadata:
+  name: canonizer
+  version: "1.0.0"
+  description: "Architecture documentation for the canonizer schema registry"
+  owner: platform-team
+  status: draft
+  updated: "2025-12-11"
+
+system:
+  name: canonizer
+  purpose: "Schema registry providing immutable, versioned, content-addressable schemas for structured data validation"
+  scope: "Cross-project schema management for consistent data contracts"
+  type: registry
+  actors:
+    - name: Developer
+      type: human
+      interactions:
+        - "Register new schemas"
+        - "Query schema by ID"
+        - "Check schema status"
+    - name: Application
+      type: system
+      interactions:
+        - "Fetch schema for validation"
+        - "Verify schema checksum"
+    - name: CI Pipeline
+      type: system
+      interactions:
+        - "Validate data against schemas"
+        - "Check for schema drift"
+    - name: LLM Agent
+      type: agent
+      interactions:
+        - "Generate schema-compliant data"
+        - "Validate outputs against schemas"
+
+containers:
+  - name: Registry
+    tech: python
+    location: src/canonizer/registry.py
+    responsibilities:
+      - "Store and retrieve schema definitions"
+      - "Manage schema metadata (version, status, checksum)"
+      - "Support content-addressable lookup by checksum"
+      - "Enforce immutability of registered schemas"
+    anti_responsibilities:
+      - "Must NOT validate data against schemas (that's Runtime)"
+      - "Must NOT modify registered schemas"
+    depends_on: [Models]
+    exposes:
+      - "register_schema()"
+      - "get_schema()"
+      - "get_schema_by_checksum()"
+      - "list_schemas()"
+
+  - name: Runtime
+    tech: python/jsonschema
+    location: src/canonizer/runtime.py
+    responsibilities:
+      - "Validate data against schemas at runtime"
+      - "Cache compiled validators for performance"
+      - "Handle validation errors gracefully"
+    anti_responsibilities:
+      - "Must NOT store schemas"
+      - "Must NOT modify schema registry"
+    depends_on: [Registry, Models]
+    exposes:
+      - "validate()"
+      - "is_valid()"
+      - "get_validator()"
+
+  - name: Validator
+    tech: python/jsonschema
+    location: src/canonizer/validator.py
+    responsibilities:
+      - "Validate schema definitions themselves"
+      - "Check schema follows JSON Schema spec"
+      - "Verify required metadata present"
+    anti_responsibilities:
+      - "Must NOT validate data (that's Runtime)"
+    depends_on: [Models]
+    exposes:
+      - "validate_schema()"
+      - "check_schema_metadata()"
+
+  - name: CLI
+    tech: python/typer
+    location: src/canonizer/cli.py
+    responsibilities:
+      - "Command-line interface for registry operations"
+      - "Human-friendly output formatting"
+      - "Batch operations support"
+    anti_responsibilities:
+      - "Must NOT implement core logic"
+    depends_on: [Registry, Runtime, Validator]
+    exposes:
+      - "canon register"
+      - "canon get"
+      - "canon validate"
+      - "canon list"
+
+  - name: Lock File
+    tech: yaml
+    location: canonizer.lock.yaml
+    responsibilities:
+      - "Record all registered schemas with checksums"
+      - "Enable reproducible schema resolution"
+      - "Track schema status history"
+    anti_responsibilities:
+      - "Must NOT be modified manually"
+      - "Entries must NOT be deleted"
+    depends_on: []
+    exposes:
+      - "Append-only schema registry"
+
+  - name: Models
+    tech: python/dataclasses
+    location: src/canonizer/models.py
+    responsibilities:
+      - "Define Schema dataclass"
+      - "Define SchemaStatus enum (draft/active/deprecated/archived)"
+      - "Define Checksum value object"
+    anti_responsibilities:
+      - "Must NOT contain business logic"
+    depends_on: []
+    exposes:
+      - "Schema"
+      - "SchemaStatus"
+      - "Checksum"
+
+flows:
+  - name: Register Schema
+    description: "Add new schema to registry"
+    path:
+      - "CLI receives 'canon register <file>'"
+      - "Validator checks schema is valid JSON Schema"
+      - "Registry computes SHA256 checksum"
+      - "Registry checks for duplicate checksum"
+      - "Registry appends to lock file"
+      - "CLI confirms registration"
+    schemas:
+      - "canonizer.schema.v1"
+
+  - name: Validate Data
+    description: "Check data against schema"
+    path:
+      - "Application calls Runtime.validate(schema_id, data)"
+      - "Runtime fetches schema from Registry"
+      - "Runtime compiles/caches validator"
+      - "Runtime validates data"
+      - "Runtime returns validation result"
+
+  - name: Schema Lifecycle
+    description: "Progress schema through status lifecycle"
+    path:
+      - "Schema registered with status: draft"
+      - "After testing, status promoted to: active"
+      - "When superseded, status changed to: deprecated"
+      - "After migration period, status: archived"
+    schemas:
+      - "canonizer.lockfile.v1"
+
+decisions:
+  - id: adr-001-immutable-schemas
+    title: "Schemas are immutable once registered"
+    status: accepted
+    context: "Need reliable schema resolution for reproducible validation"
+    decision: "Registered schemas cannot be modified; create new version for changes"
+    rationale: "Immutability ensures consistent behavior across time and systems"
+    consequences:
+      - "Version numbers must increment for any change"
+      - "Old versions remain available forever"
+      - "Storage grows monotonically"
+
+  - id: adr-002-content-addressable
+    title: "Support content-addressable schema lookup"
+    status: accepted
+    context: "Need to verify schema integrity and enable deduplication"
+    decision: "All schemas have SHA256 checksum; can lookup by checksum"
+    rationale: "Content addressing provides integrity verification and enables caching"
+    consequences:
+      - "Checksum computed on registration"
+      - "Duplicate content detected automatically"
+      - "Checksums stored in lock file"
+
+  - id: adr-003-append-only-lock
+    title: "Lock file is append-only"
+    status: accepted
+    context: "Need audit trail and reproducibility"
+    decision: "Lock file entries can only be appended, never modified or deleted"
+    rationale: "Append-only ensures complete history and reproducible resolution"
+    consequences:
+      - "Lock file grows over time"
+      - "Status changes append new entry, don't modify old"
+      - "git history shows complete schema evolution"
+
+  - id: adr-004-status-lifecycle
+    title: "Schema status lifecycle"
+    status: accepted
+    context: "Need to communicate schema maturity and deprecation"
+    decision: "Four status levels: draft -> active -> deprecated -> archived"
+    rationale: "Clear lifecycle helps consumers plan migrations"
+    consequences:
+      - "draft: may change, not for production"
+      - "active: stable, safe for production"
+      - "deprecated: will be removed, migrate away"
+      - "archived: historical only, not for new use"
+
+viewpoints:
+  - name: Integrity Viewpoint
+    stakeholders: [Security, Operations]
+    concerns:
+      - "Schema content cannot be tampered with"
+      - "Validation results are trustworthy"
+      - "Audit trail is complete"
+    elements: [Registry, Lock File]
+    invariants:
+      - "Checksum matches content"
+      - "Lock file is append-only"
+      - "No schema modification after registration"
+
+  - name: Consumer Viewpoint
+    stakeholders: [Developers, Applications]
+    concerns:
+      - "Can find schemas easily"
+      - "Validation is fast"
+      - "Schema lifecycle is clear"
+    elements: [Registry, Runtime, CLI]
+    invariants:
+      - "Active schemas are stable"
+      - "Deprecated schemas have migration path"
+      - "Schema ID format is consistent"
+
+boundaries:
+  - name: CLI Interface
+    type: cli
+    contract: "canon <command> [options]"
+    direction: inbound
+    consumers: [Developer, CI Pipeline]
+
+  - name: Python API
+    type: api
+    contract: "canonizer.{registry,runtime,validator}"
+    direction: inbound
+    consumers: [Application, LLM Agent]
+
+  - name: Lock File
+    type: file
+    contract: "canonizer.lock.yaml"
+    direction: bidirectional
+    consumers: [Registry, Version Control]

@@ -1,0 +1,344 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://autogov.dev/schemas/v1/arch.json",
+  "title": "Autogov Architecture Pack",
+  "description": "Architecture-as-code pack defining system structure, components, flows, and decisions. Patterns: C4 Model, ADRs, ISO 42010.",
+  "type": "object",
+  "required": ["kind", "metadata"],
+  "properties": {
+    "kind": {
+      "const": "arch",
+      "description": "Pack type discriminator"
+    },
+    "metadata": {
+      "$ref": "#/$defs/metadata"
+    },
+    "system": {
+      "$ref": "#/$defs/system"
+    },
+    "containers": {
+      "type": "array",
+      "description": "C4 containers / major components",
+      "items": {
+        "$ref": "#/$defs/container"
+      }
+    },
+    "flows": {
+      "type": "array",
+      "description": "Data/control flows between components",
+      "items": {
+        "$ref": "#/$defs/flow"
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "description": "Architecture Decision Records (ADRs)",
+      "items": {
+        "$ref": "#/$defs/decision"
+      }
+    },
+    "viewpoints": {
+      "type": "array",
+      "description": "ISO 42010 viewpoints - different perspectives on the architecture",
+      "items": {
+        "$ref": "#/$defs/viewpoint"
+      }
+    },
+    "boundaries": {
+      "type": "array",
+      "description": "System boundaries and contracts",
+      "items": {
+        "$ref": "#/$defs/boundary"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "system": {
+      "type": "object",
+      "description": "C4 System Context",
+      "required": ["name", "purpose"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "purpose": {
+          "type": "string",
+          "description": "What this system does (1-2 sentences)"
+        },
+        "scope": {
+          "type": "string",
+          "description": "Who/what invokes this system"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["tool", "registry", "service", "library", "cli", "agent"],
+          "description": "System archetype"
+        },
+        "actors": {
+          "type": "array",
+          "description": "Who/what interacts with this system",
+          "items": {
+            "$ref": "#/$defs/actor"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "actor": {
+      "type": "object",
+      "required": ["name", "type"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["human", "agent", "system", "orchestrator"]
+        },
+        "interactions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "container": {
+      "type": "object",
+      "description": "C4 Container - a deployable/runnable unit",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "tech": {
+          "type": "string",
+          "description": "Technology stack (e.g., 'python', 'yaml+jsonata')"
+        },
+        "location": {
+          "type": "string",
+          "description": "Path in the codebase"
+        },
+        "responsibilities": {
+          "type": "array",
+          "description": "What this container does",
+          "items": {
+            "type": "string"
+          }
+        },
+        "anti_responsibilities": {
+          "type": "array",
+          "description": "What this container does NOT do",
+          "items": {
+            "type": "string"
+          }
+        },
+        "depends_on": {
+          "type": "array",
+          "description": "Other containers this depends on",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exposes": {
+          "type": "array",
+          "description": "APIs or interfaces this container exposes",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "flow": {
+      "type": "object",
+      "description": "Data or control flow",
+      "required": ["name", "path"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "path": {
+          "type": "array",
+          "description": "Ordered steps in the flow",
+          "items": {
+            "type": "string"
+          }
+        },
+        "schemas": {
+          "type": "array",
+          "description": "Canonizer schema IDs used in this flow",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "decision": {
+      "type": "object",
+      "description": "Architecture Decision Record (ADR)",
+      "required": ["id", "title", "status"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        },
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["proposed", "accepted", "deprecated", "superseded"]
+        },
+        "context": {
+          "type": "string",
+          "description": "The issue motivating this decision"
+        },
+        "decision": {
+          "type": "string",
+          "description": "What was decided"
+        },
+        "rationale": {
+          "type": "string",
+          "description": "Why this decision was made"
+        },
+        "consequences": {
+          "type": "array",
+          "description": "Implications of this decision",
+          "items": {
+            "type": "string"
+          }
+        },
+        "supersedes": {
+          "type": "string",
+          "description": "ID of decision this supersedes"
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "viewpoint": {
+      "type": "object",
+      "description": "ISO 42010 viewpoint - a perspective on the architecture",
+      "required": ["name", "concerns"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "stakeholders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "concerns": {
+          "type": "array",
+          "description": "What this viewpoint addresses",
+          "items": {
+            "type": "string"
+          }
+        },
+        "elements": {
+          "type": "array",
+          "description": "Containers/components relevant to this viewpoint",
+          "items": {
+            "type": "string"
+          }
+        },
+        "invariants": {
+          "type": "array",
+          "description": "Rules that must hold for this viewpoint",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "boundary": {
+      "type": "object",
+      "description": "System boundary or contract",
+      "required": ["name", "type"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["api", "cli", "file", "event", "internal"]
+        },
+        "contract": {
+          "type": "string",
+          "description": "Reference to schema or spec defining the contract"
+        },
+        "direction": {
+          "type": "string",
+          "enum": ["inbound", "outbound", "bidirectional"]
+        },
+        "consumers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Unique pack identifier",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "version": {
+          "type": "string",
+          "description": "Semantic version",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "description": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string",
+          "description": "Role or team that owns this pack"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "stable", "deprecated"],
+          "default": "draft"
+        },
+        "updated": {
+          "type": "string",
+          "description": "Last update date (YYYY-MM-DD format)",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "checksum": {
+          "type": "object",
+          "description": "Content integrity verification",
+          "properties": {
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

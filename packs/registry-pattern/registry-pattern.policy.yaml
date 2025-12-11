@@ -1,0 +1,202 @@
+# registry-pattern policy - enforcement rules for git-backed registries
+kind: policy
+metadata:
+  name: registry-pattern
+  version: "1.0.0"
+  description: "Policy rules enforcing data-only, git-backed registry invariants"
+  owner: platform-team
+  status: active
+  updated: "2025-12-11"
+
+scope:
+  description: "Applies to all git-backed registry directories"
+  roots:
+    - "~/.life/registries/*/"
+    - "**/registry/"
+    - "**/registries/*/"
+  excludes:
+    - "**/node_modules/**"
+    - "**/.git/**"
+    - "**/venv/**"
+
+rules:
+  # === ERROR severity: hard failures ===
+
+  - id: registry.git_versioned
+    description: "Registry root must be a git repository"
+    severity: error
+    applies_to: [REGISTRY]
+    rationale: "Git provides versioning, audit trail, and sync mechanism"
+    check: "Directory contains .git folder"
+    remediation: "Initialize git repository: git init"
+
+  - id: registry.no_executable_code
+    description: "Registry must not contain executable code files"
+    severity: error
+    applies_to: [REGISTRY]
+    rationale: "Data-only invariant prevents supply chain attacks"
+    check: "No .py, .js, .ts, .sh, .rb, .go, .rs, .exe, .dll files"
+    remediation: "Remove code files; logic belongs in accessor, not registry"
+
+  - id: registry.immutable_versions
+    description: "Published versions must not be modified in-place"
+    severity: error
+    applies_to: [REGISTRY]
+    rationale: "Consumers depend on version stability for reproducibility"
+    check: "Git history shows no commits modifying existing version content"
+    remediation: "Create new version instead of modifying existing"
+
+  - id: registry.no_project_local_packs
+    description: "Packs must not be stored in project directories"
+    severity: error
+    applies_to: [ACCESSOR]
+    rationale: "Single source of truth is the registry, not scattered copies"
+    check: "No ./packs/ directory in project root"
+    remediation: "Use gov registry sync to get packs from registry"
+
+  - id: registry.no_accessor_references
+    description: "Registry definitions must not reference specific accessor implementations"
+    severity: error
+    applies_to: [REGISTRY]
+    rationale: "Registry is abstract; accessor is an implementation detail"
+    check: "No hardcoded tool names (autogov, canonizer, etc.) in definitions"
+    remediation: "Use generic terms: 'accessor', 'tool', 'consumer'"
+
+  # === WARNING severity: recommendations ===
+
+  - id: registry.checksum_recommended
+    description: "Definitions should have checksums for integrity verification"
+    severity: warning
+    applies_to: [REGISTRY]
+    rationale: "Checksums enable tamper detection and content-addressable lookup"
+    check: "REGISTRY.lock contains sha256 checksums"
+    remediation: "Generate lock file with checksums"
+
+  - id: registry.status_recommended
+    description: "Definitions should have explicit lifecycle status"
+    severity: warning
+    applies_to: [REGISTRY]
+    rationale: "Status communicates maturity: draft, active, deprecated, archived"
+    check: "metadata.status field present in all definitions"
+    remediation: "Add status field to definition metadata"
+
+  - id: registry.semver_recommended
+    description: "Definitions should use semantic versioning"
+    severity: warning
+    applies_to: [REGISTRY]
+    rationale: "Semver communicates breaking changes and compatibility"
+    check: "metadata.version matches X.Y.Z pattern"
+    remediation: "Use semver format: MAJOR.MINOR.PATCH"
+
+constraints:
+  allow:
+    file_types:
+      - extension: ".yaml"
+        reason: "Primary definition format"
+      - extension: ".yml"
+        reason: "Alternative YAML extension"
+      - extension: ".json"
+        reason: "JSON schemas and data"
+      - extension: ".md"
+        reason: "Documentation"
+      - extension: ".txt"
+        reason: "Plain text (LICENSE, etc.)"
+    paths:
+      - path: "packs/**/*.yaml"
+        reason: "Pack definitions"
+      - path: "schemas/**/*.json"
+        reason: "JSON schemas"
+      - path: "blocks/**/*.yaml"
+        reason: "Reusable blocks"
+      - path: "REGISTRY.yaml"
+        reason: "Registry metadata"
+      - path: "REGISTRY.lock"
+        reason: "Version lock file"
+      - path: "README.md"
+        reason: "Documentation"
+      - path: "LICENSE"
+        reason: "License file"
+
+  deny:
+    file_types:
+      - extension: ".py"
+        reason: "No Python code in registry"
+      - extension: ".js"
+        reason: "No JavaScript code in registry"
+      - extension: ".ts"
+        reason: "No TypeScript code in registry"
+      - extension: ".sh"
+        reason: "No shell scripts in registry"
+      - extension: ".rb"
+        reason: "No Ruby code in registry"
+      - extension: ".go"
+        reason: "No Go code in registry"
+      - extension: ".rs"
+        reason: "No Rust code in registry"
+      - extension: ".exe"
+        reason: "No executables in registry"
+      - extension: ".dll"
+        reason: "No binaries in registry"
+      - extension: ".so"
+        reason: "No shared libraries in registry"
+    paths:
+      - path: "**/node_modules/**"
+        reason: "No npm packages"
+      - path: "**/__pycache__/**"
+        reason: "No Python cache"
+      - path: "**/venv/**"
+        reason: "No virtual environments"
+      - path: "**/.venv/**"
+        reason: "No virtual environments"
+
+roles:
+  REGISTRY:
+    description: "Registry maintainer role"
+    must_follow_rules:
+      - "registry.git_versioned"
+      - "registry.no_executable_code"
+      - "registry.immutable_versions"
+      - "registry.no_accessor_references"
+    directives:
+      - "All changes via git commits"
+      - "Never modify published versions"
+      - "Keep data-only invariant"
+    can_modify_policies: true
+    can_override: []
+
+  ACCESSOR:
+    description: "Accessor tool developer role"
+    must_follow_rules:
+      - "registry.no_project_local_packs"
+    directives:
+      - "Sync from registry, don't copy packs locally"
+      - "Use registry root abstraction"
+      - "Fail fast if registry not synced"
+    can_modify_policies: false
+    can_override: []
+
+  CONSUMER:
+    description: "End user consuming definitions"
+    must_follow_rules: []
+    directives:
+      - "Run accessor sync before using packs"
+      - "Pin versions for reproducibility"
+      - "Check definition status before use"
+    can_modify_policies: false
+    can_override: []
+
+escalation:
+  - id: code_in_registry
+    trigger: "Executable code file detected in registry"
+    action: refuse
+    message: "Registry must be data-only. Move code to accessor repository."
+
+  - id: version_modification
+    trigger: "Attempt to modify published version"
+    action: refuse
+    message: "Published versions are immutable. Create a new version instead."
+
+  - id: local_packs_detected
+    trigger: "Project contains ./packs/ directory"
+    action: warn
+    message: "Local packs detected. Use `gov registry sync` for canonical definitions."

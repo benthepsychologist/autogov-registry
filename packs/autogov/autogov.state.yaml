@@ -1,0 +1,121 @@
+# autogov state pack - current maturity, focus, and golden paths
+kind: state
+metadata:
+  name: autogov
+  version: "1.0.0"
+  description: "Current state and development guidance for autogov"
+  owner: platform-team
+  status: draft
+  updated: "2025-12-11"
+
+maturity:
+  level: alpha
+  assessed_at: "2025-12-11"
+  rationale: "v1 implements multi-kind packs but needs production validation"
+  blockers_to_next:
+    - "Complete test coverage for all three pack kinds"
+    - "Validate schemas with real-world packs"
+    - "Document migration from v0 pack format"
+    - "CLI help text and error messages polished"
+
+current_focus:
+  primary: "Multi-kind pack support (policy, arch, state)"
+  secondary:
+    - "Schema validation for all kinds"
+    - "Kind-specific export formats"
+    - "Dogfooding with autogov and canonizer packs"
+  not_now:
+    - "Remote pack registries"
+    - "Pack versioning and dependencies"
+    - "Pack inheritance/composition"
+    - "GUI or web interface"
+  rationale: "v1 establishes the foundation; defer advanced features to v2"
+
+golden_paths:
+  - name: Add a new policy pack
+    description: "Standard process for creating a new policy pack"
+    when: "You need to define governance rules for a project"
+    steps:
+      - "Create packs/{project}/ directory"
+      - "Create {project}.policy.yaml with kind: policy"
+      - "Define metadata (name, version, description, owner)"
+      - "Add rules with id, description, severity"
+      - "Add constraints (allow/deny/require)"
+      - "Run 'gov validate {project}' to check schema"
+    refs:
+      - "schemas/policy.schema.json"
+      - "packs/autogov/autogov.policy.yaml"
+    anti_patterns:
+      - "Don't mix architecture docs in policy packs"
+      - "Don't use kind: arch or kind: state for rules"
+
+  - name: Add architecture documentation
+    description: "Standard process for creating an arch pack"
+    when: "You need to document system structure and decisions"
+    steps:
+      - "Create packs/{project}/{project}.arch.yaml"
+      - "Define system context (name, purpose, actors)"
+      - "Add containers with responsibilities"
+      - "Document key flows"
+      - "Record architecture decisions (ADRs)"
+      - "Run 'gov validate {project}'"
+    refs:
+      - "schemas/arch.schema.json"
+      - "packs/autogov/autogov.arch.yaml"
+    anti_patterns:
+      - "Don't put policy rules in arch packs"
+      - "Don't skip the anti_responsibilities - they prevent scope creep"
+
+  - name: Document project state
+    description: "Standard process for creating a state pack"
+    when: "You need to communicate current status and focus"
+    steps:
+      - "Create packs/{project}/{project}.state.yaml"
+      - "Set maturity level with blockers"
+      - "Define current_focus with primary/secondary/not_now"
+      - "Add golden_paths for common tasks"
+      - "Reference canonizer schemas if applicable"
+    refs:
+      - "schemas/state.schema.json"
+      - "packs/autogov/autogov.state.yaml"
+    anti_patterns:
+      - "Don't use state pack for permanent architecture docs"
+      - "Keep state pack updated - stale state is misleading"
+
+  - name: Export policies for LLM context
+    description: "Load governance rules into an LLM agent's context"
+    when: "An LLM agent needs to follow project governance"
+    steps:
+      - "Run 'gov export {project} --format text'"
+      - "Include output in agent system prompt or context"
+      - "For role-specific rules: 'gov export {project} --role IMPL'"
+    refs:
+      - "src/autogov/cli.py:export_cmd"
+    anti_patterns:
+      - "Don't export arch packs for policy compliance"
+      - "Don't forget --role filter for focused context"
+
+canonizer_refs:
+  - schema_id: autogov.pack.v1
+    purpose: "Self-referential - autogov pack format definition"
+    status: active
+    notes: "Defined in schemas/*.schema.json"
+
+extensions:
+  safe_to_extend:
+    - name: New pack kinds
+      location: schemas/
+      reason: "Schema system designed for extensibility"
+    - name: Export formats
+      location: src/autogov/exporter.py
+      reason: "Exporter has format dispatch pattern"
+    - name: CLI commands
+      location: src/autogov/cli.py
+      reason: "Typer makes adding commands straightforward"
+  frozen:
+    - name: Pack base schema
+      location: schemas/pack.base.schema.json
+      reason: "Breaking change - affects all existing packs"
+    - name: Registry discovery pattern
+      location: src/autogov/registry.py
+      reason: "Convention established - changing breaks existing setups"

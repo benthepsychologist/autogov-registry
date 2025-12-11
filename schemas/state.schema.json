@@ -1,0 +1,247 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://autogov.dev/schemas/v1/state.json",
+  "title": "Autogov State Pack",
+  "description": "Platform state pack defining maturity, focus, golden paths, and canonizer references. Patterns: Spotify Backstage, Golden Paths, TechDocs.",
+  "type": "object",
+  "required": ["kind", "metadata"],
+  "properties": {
+    "kind": {
+      "const": "state",
+      "description": "Pack type discriminator"
+    },
+    "metadata": {
+      "$ref": "#/$defs/metadata"
+    },
+    "maturity": {
+      "$ref": "#/$defs/maturity"
+    },
+    "current_focus": {
+      "$ref": "#/$defs/currentFocus"
+    },
+    "golden_paths": {
+      "type": "array",
+      "description": "Recommended paths for common tasks (Spotify Golden Paths pattern)",
+      "items": {
+        "$ref": "#/$defs/goldenPath"
+      }
+    },
+    "canonizer_refs": {
+      "type": "array",
+      "description": "References to canonizer schemas used by this project",
+      "items": {
+        "$ref": "#/$defs/canonizerRef"
+      }
+    },
+    "extensions": {
+      "$ref": "#/$defs/extensions"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "maturity": {
+      "type": "object",
+      "description": "Project/system maturity assessment",
+      "required": ["level"],
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": ["experimental", "alpha", "beta", "stable", "deprecated"],
+          "description": "Current maturity level"
+        },
+        "assessed_at": {
+          "type": "string",
+          "description": "When maturity was last assessed (YYYY-MM-DD)",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "rationale": {
+          "type": "string",
+          "description": "Why this maturity level was assigned"
+        },
+        "blockers_to_next": {
+          "type": "array",
+          "description": "What's blocking progression to next maturity level",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "currentFocus": {
+      "type": "object",
+      "description": "Current development focus and priorities",
+      "properties": {
+        "primary": {
+          "type": "string",
+          "description": "Primary focus area right now"
+        },
+        "secondary": {
+          "type": "array",
+          "description": "Secondary focus areas",
+          "items": {
+            "type": "string"
+          }
+        },
+        "not_now": {
+          "type": "array",
+          "description": "Explicitly out of scope for now",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rationale": {
+          "type": "string",
+          "description": "Why these are the current priorities"
+        }
+      },
+      "additionalProperties": false
+    },
+    "goldenPath": {
+      "type": "object",
+      "description": "A recommended path for a common task (Spotify pattern)",
+      "required": ["name", "description"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "when": {
+          "type": "string",
+          "description": "When to use this path"
+        },
+        "steps": {
+          "type": "array",
+          "description": "Steps to follow",
+          "items": {
+            "type": "string"
+          }
+        },
+        "refs": {
+          "type": "array",
+          "description": "References to docs, tools, or templates",
+          "items": {
+            "type": "string"
+          }
+        },
+        "anti_patterns": {
+          "type": "array",
+          "description": "What NOT to do",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "canonizerRef": {
+      "type": "object",
+      "description": "Reference to a canonizer schema",
+      "required": ["schema_id"],
+      "properties": {
+        "schema_id": {
+          "type": "string",
+          "description": "Canonizer schema identifier"
+        },
+        "purpose": {
+          "type": "string",
+          "description": "What this schema is used for in this project"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "migrating", "deprecated"],
+          "description": "Current status of this schema in the project"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Safe extension points",
+      "properties": {
+        "safe_to_extend": {
+          "type": "array",
+          "description": "Areas where it's safe to add new functionality",
+          "items": {
+            "$ref": "#/$defs/extensionPoint"
+          }
+        },
+        "frozen": {
+          "type": "array",
+          "description": "Areas that should NOT be modified",
+          "items": {
+            "$ref": "#/$defs/extensionPoint"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "extensionPoint": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string",
+          "description": "Path or module reference"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Unique pack identifier",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "version": {
+          "type": "string",
+          "description": "Semantic version",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "description": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string",
+          "description": "Role or team that owns this pack"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "stable", "deprecated"],
+          "default": "draft"
+        },
+        "updated": {
+          "type": "string",
+          "description": "Last update date (YYYY-MM-DD format)",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "checksum": {
+          "type": "object",
+          "description": "Content integrity verification",
+          "properties": {
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
