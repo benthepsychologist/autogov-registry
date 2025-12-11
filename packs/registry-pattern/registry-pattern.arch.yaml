@@ -119,7 +119,7 @@ decisions:
       - Git fetch/reset provides efficient sync
       - Single source of truth remains remote
     consequences:
-      - "Accessor manages clone location (e.g., ~/.life/registries/)"
+      - "Accessor manages clone location (e.g., ~/.local/)"
       - "Sync is explicit user action, not automatic"
       - "Local modifications are discouraged (fail-fast on dirty state)"
 

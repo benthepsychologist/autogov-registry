@@ -11,7 +11,7 @@ metadata:
 scope:
   description: "Applies to all git-backed registry directories"
   roots:
-    - "~/.life/registries/*/"
+    - "~/.local/*-registry/"
     - "**/registry/"
     - "**/registries/*/"
   excludes:

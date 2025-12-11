@@ -18,7 +18,7 @@ system:
     autogov is the accessor that syncs, loads, validates, and exports.
 
     Registry: benthepsychologist/autogov-registry
-    Local path: ~/.life/registries/autogov/
+    Local path: ~/.local/autogov-registry/
   actors:
     - name: Developer
       type: human
@@ -67,7 +67,7 @@ containers:
     tech: python
     location: src/autogov/registry.py
     responsibilities:
-      - "Resolve registry root path (~/.life/registries/autogov/)"
+      - "Resolve registry root path (~/.local/autogov-registry/)"
       - "Discover pack files in registry packs/ directory"
       - "Parse YAML files into dataclasses"
       - "Fail fast if registry not synced"
@@ -235,7 +235,7 @@ decisions:
     consequences:
       - "Registry: benthepsychologist/autogov-registry (data-only)"
       - "Accessor: benthepsychologist/autogov (this repo)"
-      - "Local clone at ~/.life/registries/autogov/"
+      - "Local clone at ~/.local/autogov-registry/"
       - "Sync required before pack operations"
 
   - id: adr-004-git-adapter
@@ -262,7 +262,7 @@ decisions:
       - Guides user to run 'gov registry sync'
       - No silent fallbacks to local ./packs/ directory
     consequences:
-      - "All pack commands fail if ~/.life/registries/autogov/ doesn't exist"
+      - "All pack commands fail if ~/.local/autogov-registry/ doesn't exist"
       - "Error message includes fix: 'Run gov registry sync first'"
       - "No environment variable overrides for pack path"
 
@@ -278,7 +278,7 @@ boundaries:
 
   - name: Registry Files
     type: file
-    contract: "~/.life/registries/autogov/packs/**/*.yaml"
+    contract: "~/.local/autogov-registry/packs/**/*.yaml"
     direction: inbound
     consumers:
       - Loader
